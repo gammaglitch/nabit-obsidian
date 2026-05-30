@@ -53,6 +53,7 @@ export default class NabitPlugin extends Plugin {
 
 	private testBridge: TestBridgeServer | null = null;
 	private syncing = false;
+	private autoSyncIntervalId: number | null = null;
 
 	onunload(): void {
 		if (this.testBridge) {
@@ -76,6 +77,8 @@ export default class NabitPlugin extends Plugin {
 		});
 		this.addRibbonIcon('refresh-cw', 'Nabit: sync now', () => void this.sync());
 
+		this.restartAutoSync();
+
 		this.registerView(
 			PLUGIN_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new NabitView(leaf, this)
@@ -83,6 +86,9 @@ export default class NabitPlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(() => {
 			void openOrRevealPluginView(this, { reveal: true });
+			if (this.settings.syncOnStartup) {
+				void this.sync();
+			}
 		});
 
 		try {
@@ -119,6 +125,22 @@ export default class NabitPlugin extends Plugin {
 			);
 		} finally {
 			this.syncing = false;
+		}
+	}
+
+	/** (Re)starts the auto-sync timer from the current interval setting. */
+	restartAutoSync(): void {
+		if (this.autoSyncIntervalId !== null) {
+			window.clearInterval(this.autoSyncIntervalId);
+			this.autoSyncIntervalId = null;
+		}
+		const minutes = this.settings.syncIntervalMinutes;
+		if (minutes && minutes > 0) {
+			this.autoSyncIntervalId = window.setInterval(
+				() => void this.sync(),
+				minutes * 60_000
+			);
+			this.registerInterval(this.autoSyncIntervalId);
 		}
 	}
 

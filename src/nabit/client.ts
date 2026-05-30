@@ -51,6 +51,24 @@ export class NabitClient {
 		return res.text;
 	}
 
+	/** Downloads binary bytes (e.g. an image asset) from an absolute URL. */
+	async fetchBinary(
+		url: string,
+	): Promise<{ arrayBuffer: ArrayBuffer; contentType: string } | null> {
+		const res = await requestUrl({
+			url,
+			method: 'GET',
+			headers: this.headers(),
+			throw: false,
+		});
+		if (res.status >= 400) {
+			return null;
+		}
+		const headers = res.headers ?? {};
+		const contentType = headers['content-type'] ?? headers['Content-Type'] ?? '';
+		return { arrayBuffer: res.arrayBuffer, contentType };
+	}
+
 	private async get(url: string) {
 		const res = await requestUrl({
 			url,
