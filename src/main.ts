@@ -1,9 +1,10 @@
 import './style/index.css';
 
-import { ItemView, Plugin, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
 import { createElement, render } from 'preact';
 
 import { NabitClient } from './nabit/client';
+import { runSync } from './nabit/sync';
 import {
 	DEFAULT_SETTINGS,
 	NabitSettings,
@@ -51,6 +52,7 @@ export default class NabitPlugin extends Plugin {
 	settings: NabitSettings = DEFAULT_SETTINGS;
 
 	private testBridge: TestBridgeServer | null = null;
+	private syncing = false;
 
 	onunload(): void {
 		if (this.testBridge) {
@@ -67,6 +69,13 @@ export default class NabitPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new NabitSettingTab(this.app, this));
 
+		this.addCommand({
+			id: 'sync-now',
+			name: 'Sync now',
+			callback: () => void this.sync(),
+		});
+		this.addRibbonIcon('refresh-cw', 'Nabit: sync now', () => void this.sync());
+
 		this.registerView(
 			PLUGIN_VIEW_TYPE,
 			(leaf: WorkspaceLeaf) => new NabitView(leaf, this)
@@ -80,6 +89,36 @@ export default class NabitPlugin extends Plugin {
 			this.testBridge = await maybeStartTestBridge(this);
 		} catch (error) {
 			console.error('[test-bridge] failed to start', error);
+		}
+	}
+
+	/** Runs a one-way incremental sync, surfacing progress via notices. */
+	async sync(): Promise<void> {
+		if (this.syncing) {
+			new Notice('nabit: a sync is already running');
+			return;
+		}
+		this.syncing = true;
+		const progress = new Notice('nabit: syncing…', 0);
+		try {
+			const result = await runSync(this);
+			progress.hide();
+			new Notice(
+				`nabit: synced ${result.written} article(s)` +
+					(result.failed ? `, ${result.failed} failed` : '')
+			);
+			if (result.failed) {
+				console.warn('[nabit] sync errors', result.errors);
+			}
+		} catch (error) {
+			progress.hide();
+			new Notice(
+				`nabit: sync failed — ${
+					error instanceof Error ? error.message : String(error)
+				}`
+			);
+		} finally {
+			this.syncing = false;
 		}
 	}
 

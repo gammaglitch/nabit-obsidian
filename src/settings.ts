@@ -11,6 +11,8 @@ export interface NabitSettings {
 	targetFolder: string;
 	/** Append the comment thread to each note. */
 	includeComments: boolean;
+	/** Incremental sync cursor: max contentUpdatedAt written so far. */
+	lastContentUpdatedAt: string;
 }
 
 export const DEFAULT_SETTINGS: NabitSettings = {
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: NabitSettings = {
 	apiToken: '',
 	targetFolder: 'nabit',
 	includeComments: true,
+	lastContentUpdatedAt: '',
 };
 
 export class NabitSettingTab extends PluginSettingTab {
@@ -82,6 +85,17 @@ export class NabitSettingTab extends PluginSettingTab {
 						this.plugin.settings.includeComments = value;
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName('Sync state')
+			.setDesc('Clear the incremental cursor so the next sync re-pulls everything.')
+			.addButton((button) =>
+				button.setButtonText('Reset sync state').onClick(async () => {
+					this.plugin.settings.lastContentUpdatedAt = '';
+					await this.plugin.saveSettings();
+					new Notice('nabit: sync state reset');
+				})
 			);
 
 		new Setting(containerEl)
