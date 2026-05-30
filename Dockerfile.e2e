@@ -1,0 +1,9 @@
+FROM mcr.microsoft.com/playwright:v1.52.0-jammy
+
+RUN corepack enable \
+	&& corepack prepare pnpm@10.11.0 --activate \
+	&& apt-get update \
+	&& apt-get install -y --no-install-recommends libfuse2 xvfb xauth xdg-utils zlib1g zlib1g-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace

@@ -1,0 +1,36 @@
+services:
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    working_dir: /workspace
+    environment:
+      CI: "1"
+      E2E_VAULT_DIR: /workspace/.e2e/vault
+      PLAYWRIGHT_HTML_REPORT: /workspace/.e2e/report
+      PLAYWRIGHT_ARTIFACTS_DIR: /workspace/.e2e/artifacts
+    volumes:
+      - .:/workspace
+      - e2e-node-modules:/workspace/node_modules
+      - ${OBSIDIAN_BINARY_PATH:?Set OBSIDIAN_BINARY_PATH to your local Obsidian binary}:/opt/obsidian/Obsidian.AppImage:ro
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        pnpm install --frozen-lockfile --force
+        pnpm e2e:prepare-vault
+        pnpm e2e:build
+        rm -rf /workspace/.e2e/home
+        mkdir -p /workspace/.e2e/home/.config/obsidian
+        cat > /workspace/.e2e/home/.config/obsidian/obsidian.json <<'OJSON'
+        {"vaults":{"e2e":{"path":"/workspace/.e2e/vault","ts":1,"open":true}}}
+        OJSON
+        (cd /tmp && /opt/obsidian/Obsidian.AppImage --appimage-extract)
+        pnpm exec electron-fuses write --app /tmp/squashfs-root/obsidian EnableNodeCliInspectArguments=on
+        export OBSIDIAN_E2E_BINARY=/tmp/squashfs-root/obsidian
+        export OBSIDIAN_E2E_APPDIR=/tmp/squashfs-root
+        Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+        HOME=/workspace/.e2e/home XDG_CONFIG_HOME=/workspace/.e2e/home/.config DISPLAY=:99 pnpm e2e:smoke
+volumes:
+  e2e-node-modules:

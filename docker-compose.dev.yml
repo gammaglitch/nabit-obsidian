@@ -1,0 +1,47 @@
+services:
+  obsidian-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    working_dir: /workspace
+    environment:
+      E2E_VAULT_DIR: /workspace/.e2e/vault
+      VITE_OBSIDIAN_DEBUG_BRIDGE: "1"
+      VITE_OBSIDIAN_DEBUG_BRIDGE_HOST: "0.0.0.0"
+      VITE_OBSIDIAN_DEBUG_BRIDGE_PORT: ${OBSIDIAN_DEBUG_BRIDGE_PORT:-27124}
+      VITE_OBSIDIAN_DEBUG_BRIDGE_TOKEN: ${OBSIDIAN_DEBUG_BRIDGE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:${OBSIDIAN_DEBUG_BRIDGE_PORT:-27124}/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
+    ports:
+      - "${OBSIDIAN_DEBUG_BRIDGE_PORT:-27124}:${OBSIDIAN_DEBUG_BRIDGE_PORT:-27124}"
+    volumes:
+      - .:/workspace
+      - dev-node-modules:/workspace/node_modules
+      - ${OBSIDIAN_BINARY_PATH:?Set OBSIDIAN_BINARY_PATH to your local Obsidian binary}:/opt/obsidian/Obsidian.AppImage:ro
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        pnpm install --no-frozen-lockfile
+        pnpm e2e:prepare-vault
+        pnpm e2e:build
+        rm -rf /workspace/.e2e/home
+        mkdir -p /workspace/.e2e/home/.config/obsidian
+        cat > /workspace/.e2e/home/.config/obsidian/obsidian.json <<'OJSON'
+        {"vaults":{"dev":{"path":"/workspace/.e2e/vault","ts":1,"open":true}}}
+        OJSON
+        rm -rf /tmp/squashfs-root
+        (cd /tmp && /opt/obsidian/Obsidian.AppImage --appimage-extract)
+        pnpm exec electron-fuses write --app /tmp/squashfs-root/obsidian EnableNodeCliInspectArguments=on
+        Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
+        HOME=/workspace/.e2e/home XDG_CONFIG_HOME=/workspace/.e2e/home/.config DISPLAY=:99 \
+          /tmp/squashfs-root/obsidian --no-sandbox --remote-debugging-port=9222 /workspace/.e2e/vault &
+        pnpm node scripts/cdp-dismiss-trust.mjs
+        wait
+volumes:
+  dev-node-modules:
