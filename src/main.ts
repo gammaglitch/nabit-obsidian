@@ -3,6 +3,12 @@ import './style/index.css';
 import { ItemView, Plugin, WorkspaceLeaf } from 'obsidian';
 import { createElement, render } from 'preact';
 
+import { NabitClient } from './nabit/client';
+import {
+	DEFAULT_SETTINGS,
+	NabitSettings,
+	NabitSettingTab,
+} from './settings';
 import { ViewWrapper } from './ViewWrapper';
 import {
 	PLUGIN_VIEW_ICON,
@@ -12,10 +18,10 @@ import {
 import { maybeStartTestBridge, TestBridgeServer } from './obsidian/testBridge';
 import { openOrRevealPluginView } from './obsidian/view';
 
-class ObsikitView extends ItemView {
+class NabitView extends ItemView {
 	private plugin: Plugin;
 
-	constructor(leaf: WorkspaceLeaf, plugin: ObsikitPlugin) {
+	constructor(leaf: WorkspaceLeaf, plugin: NabitPlugin) {
 		super(leaf);
 		this.plugin = plugin;
 	}
@@ -41,7 +47,9 @@ class ObsikitView extends ItemView {
 	}
 }
 
-export default class ObsikitPlugin extends Plugin {
+export default class NabitPlugin extends Plugin {
+	settings: NabitSettings = DEFAULT_SETTINGS;
+
 	private testBridge: TestBridgeServer | null = null;
 
 	onunload(): void {
@@ -56,9 +64,12 @@ export default class ObsikitPlugin extends Plugin {
 	}
 
 	async onload(): Promise<void> {
+		await this.loadSettings();
+		this.addSettingTab(new NabitSettingTab(this.app, this));
+
 		this.registerView(
 			PLUGIN_VIEW_TYPE,
-			(leaf: WorkspaceLeaf) => new ObsikitView(leaf, this)
+			(leaf: WorkspaceLeaf) => new NabitView(leaf, this)
 		);
 
 		this.app.workspace.onLayoutReady(() => {
@@ -70,5 +81,21 @@ export default class ObsikitPlugin extends Plugin {
 		} catch (error) {
 			console.error('[test-bridge] failed to start', error);
 		}
+	}
+
+	/** Builds an API client from the current settings. */
+	createClient(): NabitClient {
+		return new NabitClient({
+			baseUrl: this.settings.apiBaseUrl,
+			token: this.settings.apiToken || undefined,
+		});
+	}
+
+	async loadSettings(): Promise<void> {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
 	}
 }
